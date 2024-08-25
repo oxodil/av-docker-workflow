@@ -1,0 +1,52 @@
+name: Run Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      ALPHA_VANTAGE_API_KEY:
+        description: "API Key for Alpha Vantage"
+        required: true
+        type: string
+      FRED_API_KEY:
+        description: "API Key for FRED"
+        required: false
+        type: secret
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Pull Docker image
+        run: |
+          docker pull oxodil/av-api-tests:latest
+
+      - name: Run Tests
+        run: |
+          docker run --name av-api-tests-container \
+            -e ALPHA_VANTAGE_API_KEY="${{ github.event.inputs.ALPHA_VANTAGE_API_KEY }}" \
+            -e FRED_API_KEY="${{ secrets.FRED_API_KEY }}" \
+            -v ${{ github.workspace }}/mochawesome-report:/usr/src/app/mochawesome-report \
+            oxodil/av-api-tests:latest
+
+      - name: Check if mochawesome-report has files
+        if: always()
+        id: check_files
+        run: |
+          if ls mochawesome-report/* 1> /dev/null 2>&1; then
+            echo "files_exist=true" >> $GITHUB_ENV
+            echo "Report available"
+          else
+            echo "files_exist=false" >> $GITHUB_ENV
+            echo "Report not available"            
+          fi
+
+      - name: Archive test results
+        if: always() && env.files_exist
+        uses: actions/upload-artifact@v4
+        with:
+          name: mochawesome-report
+          path: mochawesome-report
